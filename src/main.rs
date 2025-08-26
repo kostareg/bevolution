@@ -6,7 +6,7 @@ struct Blob;
 
 impl Blob {
     fn step(&self, force: Vec3) -> Vec3 {
-        let delta = (rand::random::<f32>() - 0.5) / 100.;
+        let delta = (rand::random::<f32>() - 0.5) / 1000.;
         Vec3 {
             x: (force.x + delta).clamp(-0.1, 0.1),
             y: (force.y + delta).clamp(-0.1, 0.1),
@@ -77,7 +77,7 @@ fn spawn_blobs(
     for i in 0..100 {
         commands.spawn((
             Blob,
-            Collider::cuboid(0.1, 0.1, 0.1),
+            Collider::cuboid(0.06, 0.06, 0.06),
             RigidBody::Dynamic,
             ExternalForce { force: Vec3::ZERO, torque: Vec3::ZERO },
             Restitution::coefficient(0.7),
