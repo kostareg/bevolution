@@ -3,6 +3,17 @@ use bevy::prelude::*;
 #[derive(Component)]
 struct Blob;
 
+impl Blob {
+    fn step(&self, pos: Vec3) -> Vec3 {
+        let delta = (rand::random::<f32>() - 0.5) / 100.;
+        Vec3 {
+            x: (pos.x + delta).clamp(-2., 2.),
+            y: (pos.y + delta).clamp(-2., 2.),
+            z: (pos.y + delta).clamp(-2., 2.),
+        }
+    }
+}
+
 fn spawn_blobs(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -27,11 +38,16 @@ fn spawn_blobs(
 
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(-9., 9., 9.).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 }
 
-fn step(query: Query<&mut Blob>) {
+fn step(
+    mut query: Query<(&Blob, &mut Transform)>,
+) {
+    for (blob, mut transform) in &mut query {
+        transform.translation = blob.step(transform.translation);
+    }
 }
 
 fn render() {}
