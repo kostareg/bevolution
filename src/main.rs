@@ -6,11 +6,11 @@ struct Blob;
 
 impl Blob {
     fn step(&self, force: Vec3) -> Vec3 {
-        let delta = rand::random::<f32>() - 0.5;
+        let delta = (rand::random::<f32>() - 0.5) / 100.;
         Vec3 {
-            x: (force.x + delta).clamp(-20., 20.),
-            y: (force.y + delta).clamp(-20., 20.),
-            z: (force.y + delta).clamp(-20., 20.),
+            x: (force.x + delta).clamp(-0.1, 0.1),
+            y: (force.y + delta).clamp(-0.1, 0.1),
+            z: (force.y + delta).clamp(-0.1, 0.1),
         }
     }
 }
@@ -74,7 +74,7 @@ fn spawn_blobs(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for _ in 0..100 {
+    for i in 0..100 {
         commands.spawn((
             Blob,
             Collider::cuboid(0.1, 0.1, 0.1),
@@ -83,7 +83,7 @@ fn spawn_blobs(
             Restitution::coefficient(0.7),
             Mesh3d(meshes.add(Cuboid::new(0.1, 0.1, 0.1))),
             MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
-            Transform::from_xyz(0., 0., 0.),
+            Transform::from_xyz((i % 10) as f32 / 10., 0., (i as f32 / 90.)),
         ));
     }
 }
