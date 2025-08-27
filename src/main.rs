@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 use bevy_rapier3d::prelude::*;
 use rand::prelude::*;
 
@@ -184,12 +185,21 @@ fn step(
     }
 }
 
+fn ui_example_system(mut contexts: EguiContexts) -> Result {
+    egui::Window::new("Hello").show(contexts.ctx_mut()?, |ui| {
+        ui.label(egui::RichText::new("world").size(10.));
+    });
+    Ok(())
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(EguiPlugin::default())
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(RapierDebugRenderPlugin::default())
         .add_systems(Startup, (spawn_environment, spawn_blobs))
         .add_systems(FixedUpdate, step)
+        .add_systems(EguiPrimaryContextPass, ui_example_system)
         .run();
 }
