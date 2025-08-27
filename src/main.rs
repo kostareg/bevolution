@@ -89,13 +89,13 @@ impl Blob {
         }
 
         result.clamp(Vec3 {
-            x: -1.,
-            y: -1.,
-            z: -1.,
+            x: -0.0005,
+            y: -0.0005,
+            z: -0.0005,
         }, Vec3 {
-            x: 1.,
-            y: 1.,
-            z: 1.,
+            x: 0.0005,
+            y: 0.0005,
+            z: 0.0005,
         })
     }
 }
@@ -201,13 +201,12 @@ struct Meta {
 
 fn reset_generation(time: Res<Time>, mut countdown: ResMut<CountDown>, mut meta: ResMut<Meta>, mut commands: Commands, query: Query<(Entity, &Transform), With<Blob>>) {
     if countdown.0.tick(time.delta()).just_finished() {
-        info!("resetting generation");
+        info!("Resetting generation");
 
         let safe_zone = Collider::cuboid(1., 1., 1.);
 
         let mut counter = 0;
         for (entity, transform) in query {
-            info!("{:?}", transform.translation);
             if safe_zone.contains_local_point(transform.translation) {
                 counter += 1;
             } else {
