@@ -194,7 +194,12 @@ impl Default for CountDown {
     }
 }
 
-fn reset_generation(time: Res<Time>, mut countdown: ResMut<CountDown>, mut commands: Commands, query: Query<(Entity, &Transform), With<Blob>>) {
+#[derive(Resource, Default)]
+struct Meta {
+    survived: usize,
+}
+
+fn reset_generation(time: Res<Time>, mut countdown: ResMut<CountDown>, mut meta: ResMut<Meta>, mut commands: Commands, query: Query<(Entity, &Transform), With<Blob>>) {
     if countdown.0.tick(time.delta()).just_finished() {
         info!("resetting generation");
 
@@ -209,13 +214,13 @@ fn reset_generation(time: Res<Time>, mut countdown: ResMut<CountDown>, mut comma
                 commands.entity(entity).despawn();
             }
         }
-        info!("total safe: {counter}");
+        meta.survived = counter;
     }
 }
 
-fn ui_example_system(mut contexts: EguiContexts) -> Result {
-    egui::Window::new("Hello").show(contexts.ctx_mut()?, |ui| {
-        ui.label(egui::RichText::new("world").size(10.));
+fn ui_example_system(mut contexts: EguiContexts, meta: Res<Meta>) -> Result {
+    egui::Window::new(egui::RichText::new("Metadata").size(12.)).show(contexts.ctx_mut()?, |ui| {
+        ui.label(egui::RichText::new(format!("Survivors: {}", meta.survived)).size(10.));
     });
     Ok(())
 }
@@ -227,6 +232,7 @@ fn main() {
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(RapierDebugRenderPlugin::default())
         .init_resource::<CountDown>()
+        .init_resource::<Meta>()
         .add_systems(Startup, (spawn_environment, spawn_blobs))
         .add_systems(FixedUpdate, (step, reset_generation))
         .add_systems(EguiPrimaryContextPass, ui_example_system)
