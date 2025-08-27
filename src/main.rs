@@ -1,17 +1,101 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
+use rand::prelude::*;
 
-#[derive(Component)]
-struct Blob;
+const INPUTS_N: usize = 3;
+const INTERMEDIATES_N: usize = 10;
+const OUTPUTS_N: usize = 3;
+
+#[derive(Copy, Clone, Debug)]
+enum Neuron {
+    Input(usize),
+    Intermediate(usize),
+    Output(usize),
+}
+
+#[derive(Copy, Clone, Debug)]
+struct Connection {
+    from: Neuron,
+    to: Neuron,
+    weight: f32,
+}
+
+impl Connection {
+    fn random() -> Self {
+        let inp_rng = || rand::random_range(0..INPUTS_N);
+        let int_rng = || rand::random_range(0..INTERMEDIATES_N);
+        let out_rng = || rand::random_range(0..OUTPUTS_N);
+
+        let from = *[Neuron::Input(inp_rng()), Neuron::Intermediate(int_rng())].choose(&mut rand::rng()).unwrap();
+        let to = *[Neuron::Intermediate(int_rng()), Neuron::Output(out_rng())].choose(&mut rand::rng()).unwrap();
+
+        Self {
+            from,
+            to,
+            weight: rand::random_range(-10. .. 10.),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct NeuralNetwork {
+    connections: [Connection; 8],
+}
+
+impl NeuralNetwork {
+    fn random() -> Self {
+        Self {
+            connections: std::array::from_fn(|_| Connection::random()),
+        }
+    }
+}
+
+#[derive(Component, Debug)]
+struct Blob {
+    network: NeuralNetwork,
+    internal_state: [f32; INTERMEDIATES_N],
+}
 
 impl Blob {
-    fn step(&self, force: Vec3) -> Vec3 {
-        let delta = rand::random::<f32>() - 0.5;
-        Vec3 {
-            x: (force.x + delta) % 0.01,
-            y: (force.y + delta) % 0.01,
-            z: (force.z + delta) % 0.01,
+    fn random() -> Self {
+        Self {
+            network: NeuralNetwork::random(),
+            internal_state: std::array::from_fn(|_| rand::random_range(0. .. 0.5)),
         }
+    }
+
+    fn step(&mut self, force: Vec3) -> Vec3 {
+        let inputs = [force.x, force.y, force.z];
+        let mut result = force;
+        
+        for connection in self.network.connections {
+            let value = connection.weight * match connection.from {
+                Neuron::Input(n) => inputs[n],
+                Neuron::Intermediate(n) => self.internal_state[n],
+                Neuron::Output(_) => unimplemented!(),
+            };
+
+            match connection.to {
+                Neuron::Input(_) => unimplemented!(),
+                Neuron::Intermediate(n) => self.internal_state[n] = value,
+                Neuron::Output(n) => match n {
+                    0 => result.x = value / 100.,
+                    1 => result.y = value / 100.,
+                    2 => result.z = value / 100.,
+                    _ => unimplemented!(),
+                },
+            }
+        }
+
+        result.clamp(Vec3 {
+            x: -1.,
+            y: -1.,
+            z: -1.,
+        }, Vec3 {
+            x: 1.,
+            y: 1.,
+            z: 1.,
+        })
     }
 }
 
@@ -79,7 +163,7 @@ fn spawn_blobs(
 
     for i in 0..(max_x * max_z * 5) {
         commands.spawn((
-            Blob,
+            Blob::random(),
             Collider::cuboid(0.06, 0.06, 0.06),
             RigidBody::Dynamic,
             GravityScale(0.),
@@ -93,9 +177,9 @@ fn spawn_blobs(
 }
 
 fn step(
-    mut query: Query<(&Blob, &mut ExternalForce)>
+    mut query: Query<(&mut Blob, &mut ExternalForce)>
 ) {
-    for (blob, mut ext_force) in query.iter_mut() {
+    for (mut blob, mut ext_force) in query.iter_mut() {
         ext_force.force = blob.step(ext_force.force);
     }
 }
