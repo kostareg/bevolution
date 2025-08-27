@@ -6,11 +6,11 @@ struct Blob;
 
 impl Blob {
     fn step(&self, force: Vec3) -> Vec3 {
-        let delta = (rand::random::<f32>() - 0.5) / 1000.;
+        let delta = rand::random::<f32>() - 0.5;
         Vec3 {
-            x: (force.x + delta).clamp(-0.1, 0.1),
-            y: (force.y + delta).clamp(-0.1, 0.1),
-            z: (force.y + delta).clamp(-0.1, 0.1),
+            x: (force.x + delta) % 0.01,
+            y: (force.y + delta) % 0.01,
+            z: (force.z + delta) % 0.01,
         }
     }
 }
@@ -74,16 +74,20 @@ fn spawn_blobs(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for i in 0..100 {
+    let max_x = 25;
+    let max_z = 25;
+
+    for i in 0..(max_x * max_z * 5) {
         commands.spawn((
             Blob,
             Collider::cuboid(0.06, 0.06, 0.06),
             RigidBody::Dynamic,
+            GravityScale(0.),
             ExternalForce { force: Vec3::ZERO, torque: Vec3::ZERO },
             Restitution::coefficient(0.7),
             Mesh3d(meshes.add(Cuboid::new(0.1, 0.1, 0.1))),
             MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
-            Transform::from_xyz((i % 10) as f32 / 10., 0., (i as f32 / 90.)),
+            Transform::from_xyz((i % max_x) as f32 / 5. - 2.5, ((i / (max_x * max_z)) as f32) / 5. - 2.5, (((i / max_x) as f32) % (max_z as f32)) / 5. - 2.5),
         ));
     }
 }
