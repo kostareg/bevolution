@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{log::info, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 use bevy_rapier3d::prelude::*;
 use rand::prelude::*;
@@ -185,6 +185,34 @@ fn step(
     }
 }
 
+#[derive(Resource)]
+struct CountDown(Timer);
+
+impl Default for CountDown {
+    fn default() -> Self {
+        Self(Timer::from_seconds(3., TimerMode::Repeating))
+    }
+}
+
+fn reset_generation(time: Res<Time>, mut countdown: ResMut<CountDown>, mut commands: Commands, query: Query<(Entity, &Transform), With<Blob>>) {
+    if countdown.0.tick(time.delta()).just_finished() {
+        info!("resetting generation");
+
+        let safe_zone = Collider::cuboid(1., 1., 1.);
+
+        let mut counter = 0;
+        for (entity, transform) in query {
+            info!("{:?}", transform.translation);
+            if safe_zone.contains_local_point(transform.translation) {
+                counter += 1;
+            } else {
+                commands.entity(entity).despawn();
+            }
+        }
+        info!("total safe: {counter}");
+    }
+}
+
 fn ui_example_system(mut contexts: EguiContexts) -> Result {
     egui::Window::new("Hello").show(contexts.ctx_mut()?, |ui| {
         ui.label(egui::RichText::new("world").size(10.));
@@ -198,8 +226,9 @@ fn main() {
         .add_plugins(EguiPlugin::default())
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(RapierDebugRenderPlugin::default())
+        .init_resource::<CountDown>()
         .add_systems(Startup, (spawn_environment, spawn_blobs))
-        .add_systems(FixedUpdate, step)
+        .add_systems(FixedUpdate, (step, reset_generation))
         .add_systems(EguiPrimaryContextPass, ui_example_system)
         .run();
 }
