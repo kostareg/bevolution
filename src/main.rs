@@ -8,9 +8,9 @@ const INPUTS_N: usize = 3;
 const INTERMEDIATES_N: usize = 10;
 const OUTPUTS_N: usize = 3;
 
-const BLOBS_X_N: usize = 5;
-const BLOBS_Y_N: usize = 5;
-const BLOBS_Z_N: usize = 5;
+const BLOBS_X_N: usize = 10;
+const BLOBS_Y_N: usize = 10;
+const BLOBS_Z_N: usize = 10;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
@@ -143,10 +143,9 @@ impl NeuralNetwork {
             let bytes = connection_bytes.as_bytes();
 
             // we only care about 0, 8, 16, 24, 32-35
-
-            sum_r += ((bytes[0] as u16 + bytes[8] as u16 + bytes[16] as u16) / 3);
-            sum_g += ((bytes[24] as u16 + bytes[32] as u16 + bytes[33] as u16) / 3);
-            sum_b += ((bytes[34] as u16 + bytes[35] as u16) / 2);
+            sum_r += (bytes[0] as u16 + bytes[8] as u16 + bytes[16] as u16) / 3;
+            sum_g += (bytes[24] as u16 + bytes[32] as u16 + bytes[33] as u16) / 3;
+            sum_b += (bytes[34] as u16 + bytes[35] as u16) / 2;
         }
 
         sum_r /= 8;
@@ -195,13 +194,13 @@ impl Blob {
         }
 
         result.clamp(Vec3 {
-            x: -0.005,
-            y: -0.005,
-            z: -0.005,
+            x: -0.0005,
+            y: -0.0005,
+            z: -0.0005,
         }, Vec3 {
-            x: 0.005,
-            y: 0.005,
-            z: 0.005,
+            x: 0.0005,
+            y: 0.0005,
+            z: 0.0005,
         })
     }
 }
@@ -249,7 +248,7 @@ fn spawn_environment(
 
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(3.)))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(0, 144, 255))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
         Transform::from_xyz(0., -3., 0.),
     ));
 
@@ -258,7 +257,7 @@ fn spawn_environment(
             shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(4.0, 8.0, 4.0),
+        Transform::from_xyz(4.0, 4.0, 4.0),
     ));
 
     commands.spawn((
@@ -280,12 +279,12 @@ fn spawn_blobs(
             blob,
             Collider::cuboid(0.06, 0.06, 0.06),
             RigidBody::Dynamic,
-            GravityScale(0.1),
+            GravityScale(0.),
             ExternalForce { force: Vec3::ZERO, torque: Vec3::ZERO },
             Restitution::coefficient(0.7),
             Mesh3d(meshes.add(Cuboid::new(0.1, 0.1, 0.1))),
             MeshMaterial3d(materials.add(Color::srgb_u8(color.0, color.1, color.2))),
-            Transform::from_xyz((i % BLOBS_X_N) as f32 / 3. - 2.5, ((i / (BLOBS_X_N * BLOBS_Z_N)) as f32) / 3. - 2.5, (((i / BLOBS_X_N) as f32) % (BLOBS_Z_N as f32)) / 3. - 2.5),
+            Transform::from_xyz((i % BLOBS_X_N) as f32 / 2. - 2.5, ((i / (BLOBS_X_N * BLOBS_Z_N)) as f32) / 2. - 2.5, (((i / BLOBS_X_N) as f32) % (BLOBS_Z_N as f32)) / 2. - 2.5),
         ));
     }
 }
@@ -362,12 +361,12 @@ fn reset_generation(
                 blob,
                 Collider::cuboid(0.06, 0.06, 0.06),
                 RigidBody::Dynamic,
-                GravityScale(0.1),
+                GravityScale(0.),
                 ExternalForce { force: Vec3::ZERO, torque: Vec3::ZERO },
                 Restitution::coefficient(0.7),
                 Mesh3d(meshes.add(Cuboid::new(0.1, 0.1, 0.1))),
                 MeshMaterial3d(materials.add(Color::srgb_u8(color.0, color.1, color.2))),
-                Transform::from_xyz((i % BLOBS_X_N) as f32 / 3. - 2.5, ((i / (BLOBS_X_N * BLOBS_Z_N)) as f32) / 3. - 2.5, (((i / BLOBS_X_N) as f32) % (BLOBS_Z_N as f32)) / 3. - 2.5),
+                Transform::from_xyz((i % BLOBS_X_N) as f32 / 2. - 2.5, ((i / (BLOBS_X_N * BLOBS_Z_N)) as f32) / 2. - 2.5, (((i / BLOBS_X_N) as f32) % (BLOBS_Z_N as f32)) / 2. - 2.5),
             ));
         }
 
