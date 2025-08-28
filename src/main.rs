@@ -1,7 +1,8 @@
-use bevy::{log::info, prelude::*};
+use bevy::{log::info, platform::collections::HashSet, prelude::*};
 use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 use bevy_rapier3d::prelude::*;
 use rand::prelude::*;
+use zerocopy::{Immutable, IntoBytes};
 
 const INPUTS_N: usize = 3;
 const INTERMEDIATES_N: usize = 10;
@@ -12,10 +13,26 @@ const BLOBS_Y_N: usize = 5;
 const BLOBS_Z_N: usize = 5;
 
 #[derive(Clone, Copy, Debug)]
+#[repr(u8)]
 enum Neuron {
     Input(usize),
     Intermediate(usize),
     Output(usize),
+}
+
+impl Neuron {
+    /// see doc.rust-lang.org/stable/std/mem/fn.discriminant.html#accessing-the-numeric-value-of-the-discriminant
+    fn get_discriminant(&self) -> u8 {
+        unsafe { *<*const _>::from(self).cast::<u8>() }
+    }
+
+    fn get_value(&self) -> usize {
+        match self {
+            Self::Input(n) => *n,
+            Self::Intermediate(n) => *n,
+            Self::Output(n) => *n,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -47,11 +64,96 @@ struct NeuralNetwork {
     connections: [Connection; 8],
 }
 
+#[derive(Clone, Copy, Debug, Immutable, IntoBytes)]
+struct NeuronBytes {
+    discriminant: u8,
+    _padding: [u8; 7],
+    value: usize,
+}
+
+impl From<Neuron> for NeuronBytes {
+    fn from(value: Neuron) -> Self {
+        Self {
+            discriminant: value.get_discriminant(),
+            _padding: [0; 7],
+            value: value.get_value(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Immutable, IntoBytes)]
+struct ConnectionBytes {
+    from: NeuronBytes,
+    to: NeuronBytes,
+    weight: f32,
+    _padding: [u8; 4],
+}
+
+impl From<Connection> for ConnectionBytes {
+    fn from(value: Connection) -> Self {
+        Self {
+            from: value.from.into(),
+            to: value.to.into(),
+            weight: value.weight,
+            _padding: [0; 4],
+        }
+    }
+}
+
 impl NeuralNetwork {
     fn random() -> Self {
         Self {
             connections: std::array::from_fn(|_| Connection::random()),
         }
+    }
+
+    /// Standard red-green-blue is made up of three unsigned 8-bit integers. In order to map a
+    /// neural network to a color, we sum all of the connections and split them into three parts.
+    /// One connection has Neuron + Neuron + f32. One neuron has a discriminant (1 byte) and a
+    /// usize. Assuming 64-bit architecture[^1], we find the size of Neuron is 16 bytes after
+    /// alignment. Therefore, each Connection is 16 + 16 + 4 = 36 bytes.
+    ///
+    /// We take these 36 bytes, place them contigously, and read them as four eight byte numbers
+    /// and one four byte number. We then scale down the eight byte numbers such that they are all
+    /// at the most five bytes each (realistically, they will be less). This brings us to 24 bytes
+    /// of data. We then place this data contigously and read it as three 8 byte numbers, which
+    /// brings us to our standard red-green-blue representation *for that connection*. We then take
+    /// the average of all of the connections to find the final network color.
+    ///
+    /// [^1]: this would still work on 32-bit architecture, just would cover less color space.
+    fn all_bytes(&self) -> Vec<u8> {
+        let mut v = Vec::<u8>::with_capacity(64);
+
+        for connection in self.connections {
+            let connection_bytes: ConnectionBytes = connection.into();
+            let bytes = connection_bytes.as_bytes();
+            v.extend_from_slice(bytes);
+        }
+
+        v
+    }
+
+    fn color(&self) -> (u8, u8, u8) {
+        let mut sum_r = 0;
+        let mut sum_g = 0;
+        let mut sum_b = 0;
+
+        for connection in self.connections {
+            let connection_bytes: ConnectionBytes = connection.into();
+            let bytes = connection_bytes.as_bytes();
+
+            // we only care about 0, 8, 16, 24, 32-35
+
+            sum_r += ((bytes[0] as u16 + bytes[8] as u16 + bytes[16] as u16) / 3);
+            sum_g += ((bytes[24] as u16 + bytes[32] as u16 + bytes[33] as u16) / 3);
+            sum_b += ((bytes[34] as u16 + bytes[35] as u16) / 2);
+        }
+
+        sum_r /= 8;
+        sum_g /= 8;
+        sum_b /= 8;
+
+        (sum_r as u8, sum_g as u8, sum_b as u8)
     }
 }
 
@@ -93,13 +195,13 @@ impl Blob {
         }
 
         result.clamp(Vec3 {
-            x: -0.0005,
-            y: -0.0005,
-            z: -0.0005,
+            x: -0.005,
+            y: -0.005,
+            z: -0.005,
         }, Vec3 {
-            x: 0.0005,
-            y: 0.0005,
-            z: 0.0005,
+            x: 0.005,
+            y: 0.005,
+            z: 0.005,
         })
     }
 }
@@ -171,15 +273,18 @@ fn spawn_blobs(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for i in 0..(BLOBS_X_N * BLOBS_Y_N * BLOBS_Z_N) {
+        let blob = Blob::random();
+        let color = blob.network.color();
+
         commands.spawn((
-            Blob::random(),
+            blob,
             Collider::cuboid(0.06, 0.06, 0.06),
             RigidBody::Dynamic,
-            GravityScale(0.),
+            GravityScale(0.1),
             ExternalForce { force: Vec3::ZERO, torque: Vec3::ZERO },
             Restitution::coefficient(0.7),
             Mesh3d(meshes.add(Cuboid::new(0.1, 0.1, 0.1))),
-            MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
+            MeshMaterial3d(materials.add(Color::srgb_u8(color.0, color.1, color.2))),
             Transform::from_xyz((i % BLOBS_X_N) as f32 / 3. - 2.5, ((i / (BLOBS_X_N * BLOBS_Z_N)) as f32) / 3. - 2.5, (((i / BLOBS_X_N) as f32) % (BLOBS_Z_N as f32)) / 3. - 2.5),
         ));
     }
@@ -205,6 +310,7 @@ impl Default for CountDown {
 #[derive(Resource, Default)]
 struct Meta {
     survived: usize,
+    diversity: usize,
 }
 
 #[derive(Resource)]
@@ -236,10 +342,10 @@ fn reset_generation(
         info!("Resetting generation");
 
         let mut counter = 0;
+        let mut seen = HashSet::<Vec<u8>>::new();
         let mut samples = Vec::<&Blob>::new();
 
         for (entity, blob, transform) in query {
-            println!("{:?}", transform.translation);
             if safe_zone.contains_point(transform.translation) {
                 counter += 1;
                 samples.push(blob);
@@ -248,26 +354,32 @@ fn reset_generation(
         }
 
         for i in 0..(BLOBS_X_N * BLOBS_Y_N * BLOBS_Z_N) {
+            let blob = (*samples.choose(&mut rand::rng()).unwrap()).clone();
+            let color = blob.network.color();
+            seen.insert(blob.network.all_bytes());
+
             commands.spawn((
-                (*samples.choose(&mut rand::rng()).unwrap()).clone(),
+                blob,
                 Collider::cuboid(0.06, 0.06, 0.06),
                 RigidBody::Dynamic,
-                GravityScale(0.),
+                GravityScale(0.1),
                 ExternalForce { force: Vec3::ZERO, torque: Vec3::ZERO },
                 Restitution::coefficient(0.7),
                 Mesh3d(meshes.add(Cuboid::new(0.1, 0.1, 0.1))),
-                MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
+                MeshMaterial3d(materials.add(Color::srgb_u8(color.0, color.1, color.2))),
                 Transform::from_xyz((i % BLOBS_X_N) as f32 / 3. - 2.5, ((i / (BLOBS_X_N * BLOBS_Z_N)) as f32) / 3. - 2.5, (((i / BLOBS_X_N) as f32) % (BLOBS_Z_N as f32)) / 3. - 2.5),
             ));
         }
 
         meta.survived = counter;
+        meta.diversity = seen.len();
     }
 }
 
 fn ui_example_system(mut contexts: EguiContexts, meta: Res<Meta>) -> Result {
     egui::Window::new(egui::RichText::new("Metadata").size(12.)).show(contexts.ctx_mut()?, |ui| {
-        ui.label(egui::RichText::new(format!("Survivors: {}", meta.survived)).size(10.));
+        ui.label(egui::RichText::new(format!("Survivors: {} ({}%)", meta.survived, 100. * meta.survived as f32 / ((BLOBS_X_N * BLOBS_Y_N * BLOBS_Z_N) as f32))).size(10.));
+        ui.label(egui::RichText::new(format!("Diversity: {}", meta.diversity)).size(10.));
     });
     Ok(())
 }
@@ -277,7 +389,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin::default())
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
-        .add_plugins(RapierDebugRenderPlugin::default())
+        // .add_plugins(RapierDebugRenderPlugin::default())
         .init_resource::<CountDown>()
         .init_resource::<Meta>()
         .init_resource::<SafeZone>()

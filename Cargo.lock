@@ -356,6 +356,7 @@ dependencies = [
  "bevy_egui",
  "bevy_rapier3d",
  "rand 0.9.2",
+ "zerocopy",
 ]
 
 [[package]]
