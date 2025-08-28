@@ -310,6 +310,7 @@ impl Default for CountDown {
 struct Meta {
     survived: usize,
     diversity: usize,
+    generation: usize,
 }
 
 #[derive(Resource)]
@@ -372,13 +373,16 @@ fn reset_generation(
 
         meta.survived = counter;
         meta.diversity = seen.len();
+        meta.generation += 1;
     }
 }
 
-fn ui_example_system(mut contexts: EguiContexts, meta: Res<Meta>) -> Result {
-    egui::Window::new(egui::RichText::new("Metadata").size(12.)).show(contexts.ctx_mut()?, |ui| {
-        ui.label(egui::RichText::new(format!("Survivors: {} ({}%)", meta.survived, 100. * meta.survived as f32 / ((BLOBS_X_N * BLOBS_Y_N * BLOBS_Z_N) as f32))).size(10.));
-        ui.label(egui::RichText::new(format!("Diversity: {}", meta.diversity)).size(10.));
+fn ui_example_system(mut contexts: EguiContexts, meta: Res<Meta>, countdown: Res<CountDown>) -> Result {
+    egui::Window::new(egui::RichText::new("").size(1.)).show(contexts.ctx_mut()?, |ui| {
+        ui.label(egui::RichText::new(format!("Generation: #{}", meta.generation)).size(10.));
+        ui.label(egui::RichText::new(format!("Remaining: {:.2}s", countdown.0.remaining_secs())).size(10.));
+        ui.label(egui::RichText::new(format!("Survivors: {} blobs ({}%)", meta.survived, 100. * meta.survived as f32 / ((BLOBS_X_N * BLOBS_Y_N * BLOBS_Z_N) as f32))).size(10.));
+        ui.label(egui::RichText::new(format!("Diversity: {} variants", meta.diversity)).size(10.));
     });
     Ok(())
 }
