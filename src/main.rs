@@ -285,7 +285,15 @@ fn spawn_blobs(
             Mesh3d(meshes.add(Cuboid::new(0.1, 0.1, 0.1))),
             MeshMaterial3d(materials.add(Color::srgb_u8(color.0, color.1, color.2))),
             Transform::from_xyz((i % BLOBS_X_N) as f32 / 2. - 2.5, ((i / (BLOBS_X_N * BLOBS_Z_N)) as f32) / 2. - 2.5, (((i / BLOBS_X_N) as f32) % (BLOBS_Z_N as f32)) / 2. - 2.5),
-        ));
+        )).observe(|trigger: Trigger<Pointer<Over>>, query: Query<(&Blob, &MeshMaterial3d<StandardMaterial>)>, mut selected: ResMut<SelectedBlob>, mut materials: ResMut<Assets<StandardMaterial>>| {
+            let (blob, handle) = query.get(trigger.target()).unwrap();
+            selected.0 = Some(*blob);
+            materials.get_mut(handle).unwrap().base_color = Color::srgb_u8(255, 0, 0);
+        }).observe(|trigger: Trigger<Pointer<Out>>, query: Query<(&Blob, &MeshMaterial3d<StandardMaterial>)>, mut materials: ResMut<Assets<StandardMaterial>>| {
+            let (blob, handle) = query.get(trigger.target()).unwrap();
+            let color = blob.network.color();
+            materials.get_mut(handle).unwrap().base_color = Color::srgb_u8(color.0, color.1, color.2);
+        });
     }
 }
 
@@ -368,7 +376,15 @@ fn reset_generation(
                 Mesh3d(meshes.add(Cuboid::new(0.1, 0.1, 0.1))),
                 MeshMaterial3d(materials.add(Color::srgb_u8(color.0, color.1, color.2))),
                 Transform::from_xyz((i % BLOBS_X_N) as f32 / 2. - 2.5, ((i / (BLOBS_X_N * BLOBS_Z_N)) as f32) / 2. - 2.5, (((i / BLOBS_X_N) as f32) % (BLOBS_Z_N as f32)) / 2. - 2.5),
-            ));
+            )).observe(|trigger: Trigger<Pointer<Over>>, query: Query<(&Blob, &MeshMaterial3d<StandardMaterial>)>, mut selected: ResMut<SelectedBlob>, mut materials: ResMut<Assets<StandardMaterial>>| {
+                let (blob, handle) = query.get(trigger.target()).unwrap();
+                selected.0 = Some(*blob);
+                materials.get_mut(handle).unwrap().base_color = Color::srgb_u8(255, 0, 0);
+            }).observe(|trigger: Trigger<Pointer<Out>>, query: Query<(&Blob, &MeshMaterial3d<StandardMaterial>)>, mut materials: ResMut<Assets<StandardMaterial>>| {
+                let (blob, handle) = query.get(trigger.target()).unwrap();
+                let color = blob.network.color();
+                materials.get_mut(handle).unwrap().base_color = Color::srgb_u8(color.0, color.1, color.2);
+            });
         }
 
         meta.survived = counter;
@@ -377,25 +393,33 @@ fn reset_generation(
     }
 }
 
-fn ui_example_system(mut contexts: EguiContexts, meta: Res<Meta>, countdown: Res<CountDown>) -> Result {
+fn ui_example_system(mut contexts: EguiContexts, meta: Res<Meta>, countdown: Res<CountDown>, selected: Res<SelectedBlob>) -> Result {
     egui::Window::new(egui::RichText::new("").size(1.)).show(contexts.ctx_mut()?, |ui| {
         ui.label(egui::RichText::new(format!("Generation: #{}", meta.generation)).size(10.));
         ui.label(egui::RichText::new(format!("Remaining: {:.2}s", countdown.0.remaining_secs())).size(10.));
         ui.label(egui::RichText::new(format!("Survivors: {} blobs ({}%)", meta.survived, 100. * meta.survived as f32 / ((BLOBS_X_N * BLOBS_Y_N * BLOBS_Z_N) as f32))).size(10.));
         ui.label(egui::RichText::new(format!("Diversity: {} variants", meta.diversity)).size(10.));
+        // todo: more detail about the selected neural network here
+        if let Some(blob) = selected.0 {
+            let color = blob.network.color();
+            ui.separator();
+            ui.label(egui::RichText::new(format!("Selected blob color: {} {} {}", color.0, color.1, color.2)).size(10.));
+        }
     });
     Ok(())
 }
 
+#[derive(Default, Resource)]
+struct SelectedBlob(Option<Blob>);
+
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
-        .add_plugins(EguiPlugin::default())
-        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+        .add_plugins((DefaultPlugins, MeshPickingPlugin, EguiPlugin::default(), RapierPhysicsPlugin::<NoUserData>::default()))
         // .add_plugins(RapierDebugRenderPlugin::default())
         .init_resource::<CountDown>()
         .init_resource::<Meta>()
         .init_resource::<SafeZone>()
+        .init_resource::<SelectedBlob>()
         .add_systems(Startup, (spawn_environment, spawn_blobs))
         .add_systems(FixedUpdate, (step, reset_generation))
         .add_systems(EguiPrimaryContextPass, ui_example_system)
