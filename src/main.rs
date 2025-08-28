@@ -7,14 +7,18 @@ const INPUTS_N: usize = 3;
 const INTERMEDIATES_N: usize = 10;
 const OUTPUTS_N: usize = 3;
 
-#[derive(Copy, Clone, Debug)]
+const BLOBS_X_N: usize = 5;
+const BLOBS_Y_N: usize = 5;
+const BLOBS_Z_N: usize = 5;
+
+#[derive(Clone, Copy, Debug)]
 enum Neuron {
     Input(usize),
     Intermediate(usize),
     Output(usize),
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 struct Connection {
     from: Neuron,
     to: Neuron,
@@ -38,7 +42,7 @@ impl Connection {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 struct NeuralNetwork {
     connections: [Connection; 8],
 }
@@ -51,7 +55,7 @@ impl NeuralNetwork {
     }
 }
 
-#[derive(Component, Debug)]
+#[derive(Component, Clone, Copy, Debug)]
 struct Blob {
     network: NeuralNetwork,
     internal_state: [f32; INTERMEDIATES_N],
@@ -104,6 +108,7 @@ fn spawn_environment(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    safe_zone: Res<SafeZone>,
 ) {
     let hx = 3.;
     let hy = 3.;
@@ -135,6 +140,12 @@ fn spawn_environment(
     ));
 
     commands.spawn((
+        safe_zone.0.clone(),
+        Transform::from_translation(safe_zone.1),
+        Sensor,
+    ));
+
+    commands.spawn((
         Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(3.)))),
         MeshMaterial3d(materials.add(Color::srgb_u8(0, 144, 255))),
         Transform::from_xyz(0., -3., 0.),
@@ -159,10 +170,7 @@ fn spawn_blobs(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let max_x = 25;
-    let max_z = 25;
-
-    for i in 0..(max_x * max_z * 5) {
+    for i in 0..(BLOBS_X_N * BLOBS_Y_N * BLOBS_Z_N) {
         commands.spawn((
             Blob::random(),
             Collider::cuboid(0.06, 0.06, 0.06),
@@ -172,7 +180,7 @@ fn spawn_blobs(
             Restitution::coefficient(0.7),
             Mesh3d(meshes.add(Cuboid::new(0.1, 0.1, 0.1))),
             MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
-            Transform::from_xyz((i % max_x) as f32 / 5. - 2.5, ((i / (max_x * max_z)) as f32) / 5. - 2.5, (((i / max_x) as f32) % (max_z as f32)) / 5. - 2.5),
+            Transform::from_xyz((i % BLOBS_X_N) as f32 / 3. - 2.5, ((i / (BLOBS_X_N * BLOBS_Z_N)) as f32) / 3. - 2.5, (((i / BLOBS_X_N) as f32) % (BLOBS_Z_N as f32)) / 3. - 2.5),
         ));
     }
 }
@@ -190,7 +198,7 @@ struct CountDown(Timer);
 
 impl Default for CountDown {
     fn default() -> Self {
-        Self(Timer::from_seconds(3., TimerMode::Repeating))
+        Self(Timer::from_seconds(10., TimerMode::Repeating))
     }
 }
 
@@ -199,20 +207,60 @@ struct Meta {
     survived: usize,
 }
 
-fn reset_generation(time: Res<Time>, mut countdown: ResMut<CountDown>, mut meta: ResMut<Meta>, mut commands: Commands, query: Query<(Entity, &Transform), With<Blob>>) {
+#[derive(Resource)]
+struct SafeZone(Collider, Vec3);
+
+impl SafeZone {
+    fn contains_point(&self, point: Vec3) -> bool {
+        self.0.contains_point(self.1, Rot::IDENTITY, point)
+    }
+}
+
+impl Default for SafeZone {
+    fn default() -> Self {
+        Self(Collider::cuboid(2., 2., 2.), Vec3::new(1., 1., 1.,))
+    }
+}
+
+fn reset_generation(
+    time: Res<Time>,
+    safe_zone: Res<SafeZone>,
+    mut countdown: ResMut<CountDown>,
+    mut meta: ResMut<Meta>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    query: Query<(Entity, &Blob, &Transform), With<Blob>>,
+) {
     if countdown.0.tick(time.delta()).just_finished() {
         info!("Resetting generation");
 
-        let safe_zone = Collider::cuboid(1., 1., 1.);
-
         let mut counter = 0;
-        for (entity, transform) in query {
-            if safe_zone.contains_local_point(transform.translation) {
+        let mut samples = Vec::<&Blob>::new();
+
+        for (entity, blob, transform) in query {
+            println!("{:?}", transform.translation);
+            if safe_zone.contains_point(transform.translation) {
                 counter += 1;
-            } else {
-                commands.entity(entity).despawn();
+                samples.push(blob);
             }
+            commands.entity(entity).despawn();
         }
+
+        for i in 0..(BLOBS_X_N * BLOBS_Y_N * BLOBS_Z_N) {
+            commands.spawn((
+                (*samples.choose(&mut rand::rng()).unwrap()).clone(),
+                Collider::cuboid(0.06, 0.06, 0.06),
+                RigidBody::Dynamic,
+                GravityScale(0.),
+                ExternalForce { force: Vec3::ZERO, torque: Vec3::ZERO },
+                Restitution::coefficient(0.7),
+                Mesh3d(meshes.add(Cuboid::new(0.1, 0.1, 0.1))),
+                MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
+                Transform::from_xyz((i % BLOBS_X_N) as f32 / 3. - 2.5, ((i / (BLOBS_X_N * BLOBS_Z_N)) as f32) / 3. - 2.5, (((i / BLOBS_X_N) as f32) % (BLOBS_Z_N as f32)) / 3. - 2.5),
+            ));
+        }
+
         meta.survived = counter;
     }
 }
@@ -232,6 +280,7 @@ fn main() {
         .add_plugins(RapierDebugRenderPlugin::default())
         .init_resource::<CountDown>()
         .init_resource::<Meta>()
+        .init_resource::<SafeZone>()
         .add_systems(Startup, (spawn_environment, spawn_blobs))
         .add_systems(FixedUpdate, (step, reset_generation))
         .add_systems(EguiPrimaryContextPass, ui_example_system)
