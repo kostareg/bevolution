@@ -4,7 +4,7 @@ use bevy_rapier3d::prelude::*;
 use rand::prelude::*;
 use zerocopy::{Immutable, IntoBytes};
 
-const INPUTS_N: usize = 3;
+const INPUTS_N: usize = 4;
 const INTERMEDIATES_N: usize = 10;
 const OUTPUTS_N: usize = 3;
 
@@ -157,7 +157,7 @@ impl Blob {
     }
 
     fn step(&mut self, force: Vec3) -> Vec3 {
-        let inputs = [force.x, force.y, force.z];
+        let inputs = [force.x, force.y, force.z, rand::random_range(0. .. f32::MAX)];
         let mut result = force;
         
         for connection in self.network.connections {
