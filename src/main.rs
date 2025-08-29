@@ -107,20 +107,6 @@ impl NeuralNetwork {
         }
     }
 
-    /// Standard red-green-blue is made up of three unsigned 8-bit integers. In order to map a
-    /// neural network to a color, we sum all of the connections and split them into three parts.
-    /// One connection has Neuron + Neuron + f32. One neuron has a discriminant (1 byte) and a
-    /// usize. Assuming 64-bit architecture[^1], we find the size of Neuron is 16 bytes after
-    /// alignment. Therefore, each Connection is 16 + 16 + 4 = 36 bytes.
-    ///
-    /// We take these 36 bytes, place them contigously, and read them as four eight byte numbers
-    /// and one four byte number. We then scale down the eight byte numbers such that they are all
-    /// at the most five bytes each (realistically, they will be less). This brings us to 24 bytes
-    /// of data. We then place this data contigously and read it as three 8 byte numbers, which
-    /// brings us to our standard red-green-blue representation *for that connection*. We then take
-    /// the average of all of the connections to find the final network color.
-    ///
-    /// [^1]: this would still work on 32-bit architecture, just would cover less color space.
     fn all_bytes(&self) -> Vec<u8> {
         let mut v = Vec::<u8>::with_capacity(64);
 
